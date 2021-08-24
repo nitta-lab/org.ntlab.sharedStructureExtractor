@@ -1,6 +1,7 @@
 package org.ntlab.deltaExtractor.analyzerProvider;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 import org.ntlab.traceAnalysisPlatform.tracer.trace.FieldAccess;
@@ -91,10 +92,14 @@ public class DeltaExtractor {
 		ArrayList<String> creationList = new ArrayList<String>();	// List of objects created in this method execution. 
 		int existsInFields = 0;			// The number of objects that are originated from fields in this method execution. 
 		boolean isTrackingThis = false;	// Whether a tracking object is originated from 'this' object within a method execution called by this method execution.
+		boolean isSrcSide = true;		// Which side the referring side or the referred side this object is reached by object tracking.
 		ArrayList<ObjectReference> fieldArrays = new ArrayList<ObjectReference>();
 		ArrayList<ObjectReference> fieldArrayElements = new ArrayList<ObjectReference>();
 		ObjectReference thisObj = new ObjectReference(thisObjectId, methodExecution.getThisClassName(), 
 				Trace.getDeclaringType(methodExecution.getSignature(), methodExecution.isConstructor()), Trace.getDeclaringType(methodExecution.getCallerSideSignature(), methodExecution.isConstructor()));
+		
+		HashMap<String, DeltaAlias>  srcAliasList = new HashMap<>();
+		HashMap<String, DeltaAlias>  dstAliasList = new HashMap<>();
 		
 		if (childMethodExecution == null) {
 			// At the beginning of the traverse, this object is temporarily removed and it will come back when the caller is traversed.
@@ -108,6 +113,19 @@ public class DeltaExtractor {
 				// If the call is inner-object, then this object is temporarily removed and it will come back when the caller is traversed.
 				removeList.add(thisObjectId);		// This object will be temporarily removed later.
 				isTrackingThis = true;				// It will come back before the caller is traversed.
+				// Case of inner-object call [case 1]
+				aliasCollector.addAlias(new Alias(Alias.AliasType.RECEIVER, 0, childMethodExecution.getThisObjId(), tracePoint.duplicate()));
+			} else if (!childMethodExecution.isConstructor()) {
+				// Case of inter-object and non-constructor call [case 2]
+				aliasCollector.addAlias(new Alias(Alias.AliasType.RECEIVER, 0, childMethodExecution.getThisObjId(), tracePoint.duplicate()));
+			}
+		}
+		
+		if (childMethodExecution != null) {
+			for (String objId : objList) {
+				if (!objId.equals(childMethodExecution.getThisObjId())) {
+					aliasCollector.addAlias(new Alias(Alias.AliasType.ACTUAL_ARGUMENT, -1, objId, tracePoint.duplicate())); // argIndex is unknown.
+				}
 			}
 		}
 		
@@ -119,6 +137,14 @@ public class DeltaExtractor {
 				removeList.add(childMethodExecution.getThisObjId());
 				existsInFields++;
 				removeList.add(thisObjectId);		// This object will be temporarily removed later.
+				if (!thisObjectId.equals(childMethodExecution.getThisObjId())) {
+					//  Case of inter-object and constructor call [case 3]
+					if (childMethodExecution.getThisObjId().equals(srcObject.getId())) {
+						srcAliasList.put(childMethodExecution.getThisObjId(), new DeltaAlias(Alias.AliasType.RECEIVER, 0, childMethodExecution.getThisObjId(), tracePoint.duplicate(), true));
+					} else if (childMethodExecution.getThisObjId().equals(dstObject.getId())) {
+						dstAliasList.put(childMethodExecution.getThisObjId(), new DeltaAlias(Alias.AliasType.RECEIVER, 0, childMethodExecution.getThisObjId(), tracePoint.duplicate(), false));
+					}
+				}
 			}
 		}
 		
@@ -148,20 +174,31 @@ public class DeltaExtractor {
 					if (ownerObjectId.equals(thisObjectId)) {
 						// If a tracking object is obtained from a field of this object.
 						removeList.add(refObjectId);
-						existsInFields++;					// To consider the case when a field is accessed after it is updated within the same method execution.
 						removeList.add(thisObjectId);		// This object will be temporarily removed later.
+						if (refObjectId.equals(srcObject.getId())) {
+							srcAliasList.put(refObjectId, new DeltaAlias(Alias.AliasType.FIELD, 0, refObjectId, tracePoint.duplicate(), true));
+						} else if (refObjectId.equals(dstObject.getId())) {
+							dstAliasList.put(refObjectId, new DeltaAlias(Alias.AliasType.FIELD, 0, refObjectId, tracePoint.duplicate(), false));
+						}
+						existsInFields++;					// To consider the case when a field is accessed after it is updated within the same method execution.
 					} else {
 						// If a tracking object is obtained from a field of another object.
+						boolean isSrcSideChanged = false;
 						if (refObjectId.equals(srcObject.getId())) {
 							eStructure.addSrcSide(new Reference(ownerObjectId, refObjectId,
 									fs.getContainerClassName(), srcObject.getActualType()));
 							srcObject = new ObjectReference(ownerObjectId, fs.getContainerClassName());
+							isSrcSideChanged = true;
 						} else if(refObjectId.equals(dstObject.getId())) {
 							eStructure.addDstSide(new Reference(ownerObjectId, refObjectId,
 									fs.getContainerClassName(), dstObject.getActualType()));
 							dstObject = new ObjectReference(ownerObjectId, fs.getContainerClassName());
+							isSrcSideChanged = false;
 						}
 						objList.set(index, ownerObjectId);
+						aliasCollector.addAlias(new Alias(Alias.AliasType.FIELD, 0, refObjectId, tracePoint.duplicate()));
+						aliasCollector.changeTrackingObject(refObjectId, ownerObjectId, isSrcSideChanged); // Change the tracking object from the field value to its container.
+						aliasCollector.addAlias(new Alias(Alias.AliasType.CONTAINER, 0, ownerObjectId, tracePoint.duplicate()));
 					}
 				} else {
 					// A tracking object might be obtained as an array element accessed here.
@@ -184,6 +221,11 @@ public class DeltaExtractor {
 							if (ownerObjectId.equals(thisObjectId)) {
 								fieldArrays.add(new ObjectReference(refObjectId, refObjType));
 								fieldArrayElements.add(trackingObj);
+								if (trackingObj.getId().equals(srcObject.getId())) {
+									srcAliasList.put(trackingObj.getId(), new DeltaAlias(Alias.AliasType.ARRAY_ELEMENT, 0, trackingObj.getId(), tracePoint.duplicate(), true));
+								} else if (trackingObj.getId().equals(dstObject.getId())) {
+									dstAliasList.put(trackingObj.getId(), new DeltaAlias(Alias.AliasType.ARRAY_ELEMENT, 0, trackingObj.getId(), tracePoint.duplicate(), false));
+								}
 							}
 						}
 					}
@@ -208,9 +250,20 @@ public class DeltaExtractor {
 								removeList.add(thisObjectId);		// This object will be temporarily removed later.
 								((DeltaAugmentationInfo)prevChildMethodExecution.getAugmentation()).setTraceObjectId(Integer.parseInt(newObjId));	// A tracking object
 								((DeltaAugmentationInfo)prevChildMethodExecution.getAugmentation()).setSetterSide(false);	// Similar to referred side invocations.
+								if (newObjId.equals(srcObject.getId())) {
+									srcAliasList.put(newObjId, new DeltaAlias(Alias.AliasType.CONSTRACTOR_INVOCATION, 0, newObjId, tracePoint.duplicate(), true));
+								} else if (newObjId.equals(dstObject.getId())) {
+									dstAliasList.put(newObjId, new DeltaAlias(Alias.AliasType.CONSTRACTOR_INVOCATION, 0, newObjId, tracePoint.duplicate(), false));
+								}
 								continue;
 							}
 							String retObj = objList.get(retIndex);
+							if (retObj.equals(srcObject.getId())) {
+								isSrcSide = true;
+							} else if (retObj.equals(dstObject.getId())) {
+								isSrcSide = false;
+							}
+							aliasCollector.addAlias(new Alias(Alias.AliasType.METHOD_INVOCATION, 0, retObj, tracePoint.duplicate()));
 							if (removeList.contains(retObj)) {
 								// After conjecturing that the origin of a tracking object is a field, the origin turned out to be a return value, and cancel the previous conjecture.
 								removeList.remove(retObj);
@@ -223,11 +276,17 @@ public class DeltaExtractor {
 							TracePoint prevChildTracePoint = tracePoint.duplicate();
 							prevChildTracePoint.stepBackNoReturn();
 							calleeSearch(trace, prevChildTracePoint, objList, prevChildMethodExecution.isStatic(), retIndex, aliasCollector);	// Recursively call to traverse the called method execution.
-							if (objList.get(retIndex) != null && objList.get(retIndex).equals(prevChildMethodExecution.getThisObjId()) 
-									&& thisObjectId.equals(prevChildMethodExecution.getThisObjId())) {
-								// A tracking object turned out to be originated from a field in the called method execution.
-								removeList.add(thisObjectId);		// This object will be temporarily removed later.
-								isTrackingThis = true;				// It will come back before the caller is traversed.
+							if (objList.get(retIndex) != null && objList.get(retIndex).equals(prevChildMethodExecution.getThisObjId())) { 
+								if (thisObjectId.equals(prevChildMethodExecution.getThisObjId())) {
+									// A tracking object turned out to be originated from a field in the called method execution.
+									removeList.add(thisObjectId);		// This object will be temporarily removed later.
+									isTrackingThis = true;				// It will come back before the caller is traversed.
+								}
+								if (isSrcSide) {
+									aliasCollector.addAlias(new DeltaAlias(Alias.AliasType.RECEIVER, 0, objList.get(retIndex), tracePoint.duplicate(), true));
+								} else {
+									aliasCollector.addAlias(new DeltaAlias(Alias.AliasType.RECEIVER, 0, objList.get(retIndex), tracePoint.duplicate(), false));
+								}
 							}
 							if (isLost) {
 								checkList.add(objList.get(retIndex));
@@ -265,13 +324,13 @@ public class DeltaExtractor {
 		}
  
 		// Get the actual arguments of this method execution.
-		ArrayList<ObjectReference> argments = methodExecution.getArguments();
+		ArrayList<ObjectReference> arguments = methodExecution.getArguments();
 		
 		// In the following, we consider the case that it is unclear which expression a formal parameter or a field is the origin of a tracking object when they have the same object ID.
 		Reference r;
 		for (int i = 0; i < removeList.size(); i++) {
 			String removeId = removeList.get(i);
-			if (argments.contains(new ObjectReference(removeId))) { 
+			if (arguments.contains(new ObjectReference(removeId))) { 
 				removeList.remove(removeId);	// We conjecture that the origin is a formal parameter. 
 			} else if(objList.contains(removeId)) {
 				// The origin could be found only in a field or the tracking object was crested in the method execution. 
@@ -283,11 +342,25 @@ public class DeltaExtractor {
 						r.setCreation(creationList.contains(removeId));		// Whether removeId object was created in this method execution or not?
 						eStructure.addSrcSide(r);
 						srcObject = thisObj;
+						isSrcSide = true;
+						if (srcAliasList.containsKey(removeId)) {
+							aliasCollector.addAlias(srcAliasList.get(removeId));
+							aliasCollector.changeTrackingObject(removeId, thisObjectId, isSrcSide);
+							aliasCollector.addAlias(new Alias(Alias.AliasType.THIS, 0, thisObjectId, srcAliasList.get(removeId).getOccurrencePoint()));
+							srcAliasList.remove(removeId);
+						}
 					} else if (removeId.equals(dstObject.getId())) {
 						r = new Reference(thisObj, dstObject);
 						r.setCreation(creationList.contains(removeId));		// Whether removeId object was created in this method execution or not?
 						eStructure.addDstSide(r);
 						dstObject = thisObj;
+						isSrcSide = false;
+						if (dstAliasList.containsKey(removeId)) {
+							aliasCollector.addAlias(dstAliasList.get(removeId));
+							aliasCollector.changeTrackingObject(removeId, thisObjectId, isSrcSide);
+							aliasCollector.addAlias(new Alias(Alias.AliasType.THIS, 0, thisObjectId, dstAliasList.get(removeId).getOccurrencePoint()));
+							dstAliasList.remove(removeId);
+						}
 					}					
 				}
 			}
@@ -300,10 +373,11 @@ public class DeltaExtractor {
 			String objectId = objList.get(i);
 			if (objectId != null) {
 				ObjectReference trackingObj = new ObjectReference(objectId);
-				if (argments.contains(trackingObj)) {
+				if (arguments.contains(trackingObj)) {
 					// The origin was a formal parameter.
 					existsInAnArgument = true;
 					((DeltaAugmentationInfo)methodExecution.getAugmentation()).setTraceObjectId(Integer.parseInt(objectId));
+					aliasCollector.addAlias(new Alias(Alias.AliasType.FORMAL_PARAMETER, arguments.indexOf(trackingObj), trackingObj.getId(), methodExecution.getEntryPoint()));					
 				} else {
 					// The origin could not be found.
 					boolean isSrcSide2 = true;
@@ -317,8 +391,8 @@ public class DeltaExtractor {
 					}
 					if (trackingObj != null) {
 						// First, we conjecture that it comes from an element of an array object passed as a parameter.
-						for (int j = 0; j < argments.size(); j++) {
-							ObjectReference argArray = argments.get(j);
+						for (int j = 0; j < arguments.size(); j++) {
+							ObjectReference argArray = arguments.get(j);
 							if (argArray.getActualType().startsWith("[L") 
 									&& (trackingObj.getActualType() != null && (argArray.getActualType().endsWith(trackingObj.getActualType() + ";"))
 											|| (trackingObj.getCalleeType() != null && argArray.getActualType().endsWith(trackingObj.getCalleeType() + ";"))
@@ -339,6 +413,10 @@ public class DeltaExtractor {
 									dstObject = new ObjectReference(argArray.getId(), argArray.getActualType());
 								}
 								objectId = null;
+								aliasCollector.addAlias(new Alias(Alias.AliasType.ARRAY_ELEMENT, 0, trackingObj.getId(), methodExecution.getEntryPoint()));	// We assume that the element is get at the entry of the method.
+								aliasCollector.changeTrackingObject(trackingObj.getId(), argArray.getId(), isSrcSide2); // Change the tracking object from the array element to the array object.
+								aliasCollector.addAlias(new Alias(Alias.AliasType.ARRAY, 0, argArray.getId(), methodExecution.getEntryPoint()));		// We assume that the array is accessed at the entry of the method.
+								aliasCollector.addAlias(new Alias(Alias.AliasType.FORMAL_PARAMETER, arguments.indexOf(argArray), trackingObj.getId(), methodExecution.getEntryPoint()));					
 								break;
 							}
 						}
@@ -358,11 +436,27 @@ public class DeltaExtractor {
 									eStructure.addSrcSide(new Reference(thisObjectId, fieldArray.getId(),
 											methodExecution.getThisClassName(), fieldArray.getActualType()));
 									srcObject = thisObj;
+									if (srcAliasList.containsKey(trackingObj.getId())) {
+										aliasCollector.addAlias(srcAliasList.get(trackingObj.getId()));
+										aliasCollector.changeTrackingObject(trackingObj.getId(), fieldArray.getId(), isSrcSide2); // Change the tracking object from the array element to the array object.
+										aliasCollector.addAlias(new Alias(Alias.AliasType.ARRAY, 0, fieldArray.getId(), srcAliasList.get(trackingObj.getId()).getOccurrencePoint()));
+										aliasCollector.changeTrackingObject(fieldArray.getId(), thisObjectId, isSrcSide2); // Change the tracking object from the array object (referred to by the field) to this object.
+										aliasCollector.addAlias(new Alias(Alias.AliasType.THIS, 0, thisObjectId, srcAliasList.get(trackingObj.getId()).getOccurrencePoint()));					
+										srcAliasList.remove(trackingObj.getId());
+									}
 								} else {
 									eStructure.addDstSide(r);
 									eStructure.addDstSide(new Reference(thisObjectId, fieldArray.getId(),
 											methodExecution.getThisClassName(), fieldArray.getActualType()));
 									dstObject = thisObj;
+									if (dstAliasList.containsKey(trackingObj.getId())) {
+										aliasCollector.addAlias(dstAliasList.get(trackingObj.getId()));
+										aliasCollector.changeTrackingObject(trackingObj.getId(), fieldArray.getId(), isSrcSide2); // Change the tracking object from the array element to the array object.
+										aliasCollector.addAlias(new Alias(Alias.AliasType.ARRAY, 0, fieldArray.getId(), dstAliasList.get(trackingObj.getId()).getOccurrencePoint()));
+										aliasCollector.changeTrackingObject(fieldArray.getId(), thisObjectId, isSrcSide2); // Change the tracking object from the array object (referred to by the field) to this object.
+										aliasCollector.addAlias(new Alias(Alias.AliasType.THIS, 0, thisObjectId, dstAliasList.get(trackingObj.getId()).getOccurrencePoint()));					
+										dstAliasList.remove(trackingObj.getId());
+									}
 								}
 							}
 						}
@@ -378,6 +472,9 @@ public class DeltaExtractor {
 										methodExecution.getThisClassName(), trackingObj.getActualType()));
 								dstObject = thisObj;
 							}
+							aliasCollector.addAlias(new Alias(Alias.AliasType.ARRAY_CREATE, 0, trackingObj.getId(), methodExecution.getEntryPoint()));	// We assume that the element is created at the entry of the method.
+							aliasCollector.changeTrackingObject(trackingObj.getId(), thisObjectId, isSrcSide2); // Change the tracking object from the array to this object.
+							aliasCollector.addAlias(new Alias(Alias.AliasType.THIS, 0, thisObjectId, methodExecution.getEntryPoint()));		// We assume that the array is created at the entry of the method.
 						}
 					}
 				}
@@ -477,8 +574,13 @@ public class DeltaExtractor {
 				Trace.getDeclaringType(methodExecution.getCallerSideSignature(), methodExecution.isConstructor()));
 		
 		((DeltaAugmentationInfo)methodExecution.getAugmentation()).setSetterSide(false);		// Basically, the tracking object must be referred side, but it may not be always true.
-		ArrayList<ObjectReference> argments = methodExecution.getArguments();
+		ArrayList<ObjectReference> arguments = methodExecution.getArguments();
 		ObjectReference trackingObj = null;
+		
+		HashMap<String, DeltaAlias>  srcAliasList = new HashMap<>();
+		HashMap<String, DeltaAlias>  dstAliasList = new HashMap<>();
+
+		aliasCollector.addAlias(new Alias(Alias.AliasType.RETURN_VALUE, 0, objectId, tracePoint.duplicate()));
 		// The value of objectId may be null if a static method was traversed.
 		if (objectId != null) {
 			String returnType = Trace.getReturnType(methodExecution.getSignature());
@@ -505,31 +607,43 @@ public class DeltaExtractor {
 						String ownerObjectId = fs.getContainerObjId();
 						if (ownerObjectId.equals(thisObjectId)) {
 							// If the tracking object is obtained from a field of this object.
+							boolean isSrcSideChanged = false;
 							if (objectId.equals(srcObject.getId())) {
 								eStructure.addSrcSide(new Reference(thisObj, srcObject));
 								srcObject = thisObj;
 								trackingObj = srcObject;
+								isSrcSideChanged = true;
 							} else if(objectId.equals(dstObject.getId())) {
 								eStructure.addDstSide(new Reference(thisObj, dstObject));
 								dstObject = thisObj;
 								trackingObj = dstObject;
+								isSrcSideChanged = false;
 							}
+							aliasCollector.addAlias(new Alias(Alias.AliasType.FIELD, 0, objectId, tracePoint.duplicate()));
+							aliasCollector.changeTrackingObject(objectId, ownerObjectId, isSrcSideChanged);
+							aliasCollector.addAlias(new Alias(Alias.AliasType.THIS, 0, ownerObjectId, tracePoint.duplicate()));
 							if (Trace.isNull(thisObjectId)) objectId = null;	// If the field is static.
 							else objectId = thisObjectId;
 							objList.set(index, objectId);
 						} else {
 							// If the tracking object is obtained from a field of another object.
+							boolean isSrcSideChanged = false;
 							if (objectId.equals(srcObject.getId())) {
 								eStructure.addSrcSide(new Reference(ownerObjectId, objectId,
 										fs.getContainerClassName(), srcObject.getActualType()));
 								srcObject = new ObjectReference(ownerObjectId, fs.getContainerClassName());
 								trackingObj = srcObject;
+								isSrcSideChanged = true;
 							} else if(objectId.equals(dstObject.getId())) {
 								eStructure.addDstSide(new Reference(ownerObjectId, objectId,
 										fs.getContainerClassName(), dstObject.getActualType()));
 								dstObject = new ObjectReference(ownerObjectId, fs.getContainerClassName());
 								trackingObj = dstObject;
+								isSrcSideChanged = false;
 							}
+							aliasCollector.addAlias(new Alias(Alias.AliasType.FIELD, 0, objectId, tracePoint.duplicate()));
+							aliasCollector.changeTrackingObject(objectId, ownerObjectId, isSrcSideChanged);
+							aliasCollector.addAlias(new Alias(Alias.AliasType.CONTAINER, 0, ownerObjectId, tracePoint.duplicate()));
 							if (Trace.isNull(ownerObjectId)) objectId = null;	// If the field is static.
 							else objectId = ownerObjectId;
 							objList.set(index, objectId);
@@ -549,6 +663,11 @@ public class DeltaExtractor {
 									// If the accessed field is of this.
 									fieldArrays.add(new ObjectReference(fs.getValueObjId(), refObjType));
 									fieldArrayElements.add(trackingObj);
+									if (objectId.equals(srcObject.getId())) {
+										srcAliasList.put(objectId, new DeltaAlias(Alias.AliasType.ARRAY_ELEMENT, 0, objectId, tracePoint.duplicate(), true));
+									} else if(objectId.equals(dstObject.getId())) {
+										dstAliasList.put(objectId, new DeltaAlias(Alias.AliasType.ARRAY_ELEMENT, 0, objectId, tracePoint.duplicate(), false));
+									}
 								}
 							}
 						}
@@ -562,7 +681,12 @@ public class DeltaExtractor {
 						((DeltaAugmentationInfo)childMethodExecution.getAugmentation()).setTraceObjectId(Integer.parseInt(objectId));
 						TracePoint childTracePoint = tracePoint.duplicate();
 						childTracePoint.stepBackNoReturn();
-						calleeSearch(trace, childTracePoint, objList, childMethodExecution.isStatic(), index, aliasCollector);		// Recursively call to traverse the called method execution.	
+						if (!childMethodExecution.isConstructor()) {
+							aliasCollector.addAlias(new Alias(Alias.AliasType.METHOD_INVOCATION, 0, ret.getId(), tracePoint.duplicate()));
+							calleeSearch(trace, childTracePoint, objList, childMethodExecution.isStatic(), index, aliasCollector);		// Recursively call to traverse the called method execution.	
+						} else {
+							aliasCollector.addAlias(new Alias(Alias.AliasType.CONSTRACTOR_INVOCATION, 0, ret.getId(), tracePoint.duplicate()));
+						}
 						if (childMethodExecution.isConstructor()) {
 							// If the called method is a constructor.
 							if (objectId.equals(srcObject.getId())) {
@@ -571,12 +695,16 @@ public class DeltaExtractor {
 								eStructure.addSrcSide(r);
 								srcObject = thisObj;
 								trackingObj = srcObject;
+								aliasCollector.changeTrackingObject(objectId, thisObjectId, true);
+								aliasCollector.addAlias(new Alias(Alias.AliasType.THIS, 0, thisObjectId, tracePoint.duplicate()));
 							} else if (objectId.equals(dstObject.getId())) {
 								r = new Reference(thisObj, dstObject);
 								r.setCreation(true);
 								eStructure.addDstSide(r);
 								dstObject = thisObj;
 								trackingObj = dstObject;
+								aliasCollector.changeTrackingObject(objectId, thisObjectId, false);
+								aliasCollector.addAlias(new Alias(Alias.AliasType.THIS, 0, thisObjectId, tracePoint.duplicate()));
 							}
 							if (Trace.isNull(thisObjectId)) objectId = null;	// If this method is static.
 							else objectId = thisObjectId;
@@ -599,6 +727,11 @@ public class DeltaExtractor {
 							checkList.add(objList.get(index));
 							isLost = false;
 						}
+						if (objectId != null) {
+							if (childMethodExecution.getThisObjId().equals(objectId)) {
+								aliasCollector.addAlias(new Alias(Alias.AliasType.RECEIVER, 0, objectId, tracePoint.duplicate()));
+							}
+						}						
 					} else {
 						// A tracking object might be obtained as an element of the return value.
 						String retType = ret.getActualType();
@@ -614,9 +747,10 @@ public class DeltaExtractor {
 			} while (tracePoint.stepBackOver());
 			
 			// Search the actual arguments of this method execution.
-			if (argments.contains(new ObjectReference(objectId))) {
+			if (arguments.contains(new ObjectReference(objectId))) {
 				((DeltaAugmentationInfo)methodExecution.getAugmentation()).setSetterSide(true);		// May be needed?
 				isResolved = true;
+				aliasCollector.addAlias(new Alias(Alias.AliasType.FORMAL_PARAMETER, arguments.indexOf(new ObjectReference(objectId)), objectId, methodExecution.getEntryPoint()));
 			}
 		}
 		
@@ -630,11 +764,15 @@ public class DeltaExtractor {
 					r.setCollection(true);
 					eStructure.addSrcSide(r);
 					srcObject = thisObj;
+					aliasCollector.changeTrackingObject(objectId, thisObjectId, true);
+					aliasCollector.addAlias(new Alias(Alias.AliasType.THIS, 0, thisObjectId, tracePoint.duplicate()));
 				} else if(objectId.equals(dstObject.getId())) {
 					r = new Reference(thisObj, dstObject);
 					r.setCollection(true);
 					eStructure.addDstSide(r);
 					dstObject =thisObj;
+					aliasCollector.changeTrackingObject(objectId, thisObjectId, false);
+					aliasCollector.addAlias(new Alias(Alias.AliasType.THIS, 0, thisObjectId, tracePoint.duplicate()));
 				}
 			}
 			objList.set(index, methodExecution.getThisObjId());
@@ -651,8 +789,8 @@ public class DeltaExtractor {
 			}
 			if (trackingObj != null) {
 				// First, we conjecture that it comes from an element of an array object passed as a parameter.
-				for (int i = 0; i < argments.size(); i++) {
-					ObjectReference argArray = argments.get(i);
+				for (int i = 0; i < arguments.size(); i++) {
+					ObjectReference argArray = arguments.get(i);
 					if (argArray.getActualType().startsWith("[L") 
 							&& ((trackingObj.getActualType() != null && argArray.getActualType().endsWith(trackingObj.getActualType() + ";"))
 									|| (trackingObj.getCalleeType() != null && argArray.getActualType().endsWith(trackingObj.getCalleeType() + ";"))
@@ -672,6 +810,10 @@ public class DeltaExtractor {
 							dstObject = new ObjectReference(argArray.getId(), argArray.getActualType());
 						}
 						objectId = null;
+						aliasCollector.addAlias(new Alias(Alias.AliasType.ARRAY_ELEMENT, 0, trackingObj.getId(), methodExecution.getEntryPoint()));	// We assume that the element is get at the entry of the method.
+						aliasCollector.changeTrackingObject(trackingObj.getId(), argArray.getId(), isSrcSide); // Change the tracking object from the array element to the array object.
+						aliasCollector.addAlias(new Alias(Alias.AliasType.ARRAY, 0, argArray.getId(), methodExecution.getEntryPoint()));		// We assume that the array is accessed at the entry of the method.
+						aliasCollector.addAlias(new Alias(Alias.AliasType.FORMAL_PARAMETER, arguments.indexOf(argArray), trackingObj.getId(), methodExecution.getEntryPoint()));					
 						break;
 					}
 				}
@@ -691,11 +833,23 @@ public class DeltaExtractor {
 							eStructure.addSrcSide(new Reference(thisObjectId, fieldArray.getId(),
 									methodExecution.getThisClassName(), fieldArray.getActualType()));
 							srcObject = thisObj;
+							aliasCollector.addAlias(srcAliasList.get(trackingObj.getId()));
+							aliasCollector.changeTrackingObject(trackingObj.getId(), fieldArray.getId(), isSrcSide); // Change the tracking object from the array element to the array object.
+							aliasCollector.addAlias(new Alias(Alias.AliasType.ARRAY, 0, fieldArray.getId(), srcAliasList.get(trackingObj.getId()).getOccurrencePoint()));
+							aliasCollector.changeTrackingObject(fieldArray.getId(), thisObjectId, isSrcSide); // Change the tracking object from the array object (referred to by the field) to this object.
+							aliasCollector.addAlias(new Alias(Alias.AliasType.THIS, 0, thisObjectId, srcAliasList.get(trackingObj.getId()).getOccurrencePoint()));					
+							srcAliasList.remove(trackingObj.getId());
 						} else {
 							eStructure.addDstSide(r);
 							eStructure.addDstSide(new Reference(thisObjectId, fieldArray.getId(),
 									methodExecution.getThisClassName(), fieldArray.getActualType()));
 							dstObject = thisObj;
+							aliasCollector.addAlias(dstAliasList.get(trackingObj.getId()));
+							aliasCollector.changeTrackingObject(trackingObj.getId(), fieldArray.getId(), isSrcSide); // Change the tracking object from the array element to the array object.
+							aliasCollector.addAlias(new Alias(Alias.AliasType.ARRAY, 0, fieldArray.getId(), dstAliasList.get(trackingObj.getId()).getOccurrencePoint()));
+							aliasCollector.changeTrackingObject(fieldArray.getId(), thisObjectId, isSrcSide); // Change the tracking object from the array object (referred to by the field) to this object.
+							aliasCollector.addAlias(new Alias(Alias.AliasType.THIS, 0, thisObjectId, dstAliasList.get(trackingObj.getId()).getOccurrencePoint()));					
+							dstAliasList.remove(trackingObj.getId());
 						}
 					}
 				}
@@ -712,6 +866,9 @@ public class DeltaExtractor {
 								methodExecution.getThisClassName(), trackingObj.getActualType()));
 						dstObject = thisObj;
 					}
+					aliasCollector.addAlias(new Alias(Alias.AliasType.ARRAY_CREATE, 0, trackingObj.getId(), methodExecution.getEntryPoint()));	// We assume that the array is created at the entry of the method.
+					aliasCollector.changeTrackingObject(trackingObj.getId(), thisObjectId, isSrcSide); // Change the tracking object from the array to this object.
+					aliasCollector.addAlias(new Alias(Alias.AliasType.THIS, 0, thisObjectId, methodExecution.getEntryPoint()));		// We assume that the array is created at the entry of the method.
 				}
 			}
 		}
