@@ -1026,9 +1026,7 @@ if (DEBUG1) {
 		eStructure = new ExtractedStructure();
 		eStructure.setRelatedTracePoint(thisTracePoint.duplicate());
 		MethodExecution methodExecution = thisTracePoint.getMethodExecution();
-		if (!thisTracePoint.isMethodEntry()) {
-			thisTracePoint.stepNext();
-		}
+		thisTracePoint.stepNext();
 		ArrayList<String> objList = new ArrayList<String>();
 		String thisObjectId = methodExecution.getThisObjId();
 		objList.add(thisObjectId);
