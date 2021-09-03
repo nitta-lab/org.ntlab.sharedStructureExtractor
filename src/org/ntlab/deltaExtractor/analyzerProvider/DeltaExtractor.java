@@ -546,6 +546,9 @@ public class DeltaExtractor {
 								}
 								existsInFields++;
 								objList.remove(objectId);
+								aliasCollector.addAlias(new Alias(Alias.AliasType.FIELD, 0, objectId,  methodExecution.getEntryPoint()));
+								aliasCollector.changeTrackingObject(objectId, thisObjectId, isSrcSide2); // Change the tracking object from an object referred to by a local final variable to this object.
+								aliasCollector.addAlias(new Alias(Alias.AliasType.THIS, 0, thisObjectId,  methodExecution.getEntryPoint()));
 							}
 						}
 					}
