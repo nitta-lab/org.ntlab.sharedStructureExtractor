@@ -157,6 +157,11 @@ public class DeltaExtractor {
 				removeList.add(enclosingObj);
 				existsInFields++;
 				removeList.add(thisObjectId);		// This object will be temporarily removed later.
+				if (enclosingObj.equals(srcObject.getId())) {
+					srcAliasList.put(enclosingObj, new DeltaAlias(Alias.AliasType.FIELD, 0, enclosingObj, tracePoint.duplicate(), true));
+				} else if (enclosingObj.equals(dstObject.getId())) {
+					dstAliasList.put(enclosingObj, new DeltaAlias(Alias.AliasType.FIELD, 0, enclosingObj, tracePoint.duplicate(), false));
+				}
 			}
 		}
  
