@@ -9,7 +9,7 @@
       </category>
       <view
             category="org.ntlab.deltaExtractor.category"
-            class="org.ntlab.deltaExtractor.views.BreakPointView"
+            class="org.ntlab.sharedStructureExtractor.views.BreakPointView"
             icon="icons/view/breakpoint_view.png"
             id="org.ntlab.deltaExtractor.breakPointView"
             name="Breakpoints"
@@ -17,7 +17,7 @@
       </view>
       <view
             category="org.ntlab.deltaExtractor.category"
-            class="org.ntlab.deltaExtractor.views.VariableView"
+            class="org.ntlab.sharedStructureExtractor.views.VariableView"
             icon="icons/view/variable_view.png"
             id="org.ntlab.deltaExtractor.variableView"
             name="Variables"
@@ -25,7 +25,7 @@
       </view>
       <view
             category="org.ntlab.deltaExtractor.category"
-            class="org.ntlab.deltaExtractor.views.CallStackView"
+            class="org.ntlab.sharedStructureExtractor.views.CallStackView"
             icon="icons/view/callstack_view.png"
             id="org.ntlab.deltaExtractor.callStackView"
             name="Call Stack"
@@ -37,7 +37,7 @@
       </category>
       <view
             category="org.ntlab.deltaExtractor.category2"
-            class="org.ntlab.deltaExtractor.views.BreakPointViewRelatedDelta"
+            class="org.ntlab.sharedStructureExtractor.views.BreakPointViewRelatedDelta"
             icon="icons/view/breakpoint_view.png"
             id="org.ntlab.deltaExtractor.breakPointViewRelatedDelta"
             name="Breakpoints"
@@ -45,7 +45,7 @@
       </view>
       <view
             category="org.ntlab.deltaExtractor.category2"
-            class="org.ntlab.deltaExtractor.views.VariableViewRelatedDelta"
+            class="org.ntlab.sharedStructureExtractor.views.VariableViewRelatedDelta"
             icon="icons/view/variable_view.png"
             id="org.ntlab.deltaExtractor.variableViewRelatedDelta"
             name="Variables"
@@ -53,7 +53,7 @@
       </view>
       <view
             category="org.ntlab.deltaExtractor.category2"
-            class="org.ntlab.deltaExtractor.views.CallStackViewRelatedDelta"
+            class="org.ntlab.sharedStructureExtractor.views.CallStackViewRelatedDelta"
             icon="icons/view/callstack_view.png"
             id="org.ntlab.deltaExtractor.callStackViewRelatedDelta"
             name="Call Stack"
@@ -61,7 +61,7 @@
       </view>
       <view
             category="org.ntlab.deltaExtractor.category2"
-            class="org.ntlab.deltaExtractor.views.TracePointsRegisterView"
+            class="org.ntlab.sharedStructureExtractor.views.TracePointsRegisterView"
             icon="icons/view/tracepoints_view.png"
             id="org.ntlab.deltaExtractor.tracePointsRegisterView"
             name="Bookmarked Execution Points"
@@ -70,7 +70,7 @@
       <view
             allowMultiple="true"
             category="org.ntlab.deltaExtractor.category2"
-            class="org.ntlab.deltaExtractor.views.DeltaMarkerView"
+            class="org.ntlab.sharedStructureExtractor.views.DeltaMarkerView"
             icon="icons/view/deltamarker_view.png"
             id="org.ntlab.deltaExtractor.deltaMarkerView"
             name="Extracted Delta"
@@ -79,7 +79,7 @@
       <view
             allowMultiple="true"
             category="org.ntlab.deltaExtractor.category2"
-            class="org.ntlab.deltaExtractor.views.CallTreeView"
+            class="org.ntlab.sharedStructureExtractor.views.CallTreeView"
             icon="icons/view/calltree_view.png"
             id="org.ntlab.deltaExtractor.callTreeView"
             name="Current Execution Point in Call Tree"
@@ -89,12 +89,12 @@
    <extension
          point="org.eclipse.ui.perspectives">
       <perspective
-            class="org.ntlab.deltaExtractor.views.DeltaExtractorPerspective"
+            class="org.ntlab.sharedStructureExtractor.views.DeltaExtractorPerspective"
             id="org.ntlab.deltaExtractor.deltaExtractorPerspective"
             name="Trace Debugger (Forward)">
       </perspective>
       <perspective
-            class="org.ntlab.deltaExtractor.views.DeltaExtractorPerspectiveRelatedDelta"
+            class="org.ntlab.sharedStructureExtractor.views.DeltaExtractorPerspectiveRelatedDelta"
             id="org.ntlab.deltaExtractor.deltaExtractorPerspectiveRelatedDelta"
             name="Trace Dubugger (Reverse)">
       </perspective>
@@ -102,7 +102,7 @@
    <extension
          point="org.ntlab.traceAnalysisPlatform.additionalClasspaths">
       <classpath
-            class="org.ntlab.deltaExtractor.analyzerProvider.DeltaExtractionAnalyzerLaunchConfiguration">
+            class="org.ntlab.sharedStructureExtractor.analyzerProvider.DeltaExtractionAnalyzerLaunchConfiguration">
       </classpath>
    </extension>
    <extension

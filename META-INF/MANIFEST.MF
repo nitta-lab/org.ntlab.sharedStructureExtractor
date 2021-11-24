@@ -1,7 +1,7 @@
 Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
 Bundle-Name: DeltaExtractor
-Bundle-SymbolicName: org.ntlab.deltaExtractor;singleton:=true
+Bundle-SymbolicName: org.ntlab.sharedStructureExtractor;singleton:=true
 Bundle-Version: 1.0.0.qualifier
 Automatic-Module-Name: org.ntlab.deltaExtractor
 Require-Bundle: org.eclipse.ui;bundle-version="3.109.100",
@@ -16,7 +16,7 @@ Require-Bundle: org.eclipse.ui;bundle-version="3.109.100",
  org.eclipse.ui.ide;bundle-version="3.14.0",
  org.eclipse.text,
  org.eclipse.debug.ui;bundle-version="3.13.0"
-Bundle-Activator: org.ntlab.deltaExtractor.DeltaExtractorPlugin
+Bundle-Activator: org.ntlab.sharedStructureExtractor.SharedStructureExtractorPlugin
 Bundle-ActivationPolicy: lazy
 Bundle-ClassPath: icons/,
  .
