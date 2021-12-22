@@ -488,29 +488,29 @@ public class Test {
 		//                                                                               //
 		///////////////////////////////////////////////////////////////
 		// --------------- ArgoUML (図形選択機能のデルタ, 以下の1回目のデルタ) ---------------		
-		DeltaExtractorJSON s = new DeltaExtractorJSON("traces\\ArgoUMLBenchmarkWithMoreStandardClasses.trace");
-		MethodExecution m = null;
-		ExtractedStructure e = null;
-		do {
-			System.out.println(System.nanoTime() - time);
-			if (m == null) {
-				m = s.getLastMethodExecution("protected void org.tigris.gef.base.SelectionManager.addFig(");
-			} else {
-				TracePoint tp = m.getEntryPoint();
-				tp.stepBackOver();
-				m = s.getLastMethodExecution("protected void org.tigris.gef.base.SelectionManager.addFig(", tp);
-			}
-			if (m != null) {
-				ArrayList<ObjectReference> argments = m.getArguments();
-				System.out.println(m.getSignature() + ":" + argments.size());
-				for (int i = 0; i < argments.size(); i++) {
-					if (argments.get(i).getActualType().equals("org.argouml.uml.diagram.static_structure.ui.FigClass")) {
-						e = s.extract(m.getEntryPoint(), argments.get(i));
-						break;
-					}
-				}
-			}
-		} while (m != null);
+//		DeltaExtractorJSON s = new DeltaExtractorJSON("traces\\ArgoUMLBenchmarkWithMoreStandardClasses.trace");
+//		MethodExecution m = null;
+//		ExtractedStructure e = null;
+//		do {
+//			System.out.println(System.nanoTime() - time);
+//			if (m == null) {
+//				m = s.getLastMethodExecution("protected void org.tigris.gef.base.SelectionManager.addFig(");
+//			} else {
+//				TracePoint tp = m.getEntryPoint();
+//				tp.stepBackOver();
+//				m = s.getLastMethodExecution("protected void org.tigris.gef.base.SelectionManager.addFig(", tp);
+//			}
+//			if (m != null) {
+//				ArrayList<ObjectReference> argments = m.getArguments();
+//				System.out.println(m.getSignature() + ":" + argments.size());
+//				for (int i = 0; i < argments.size(); i++) {
+//					if (argments.get(i).getActualType().equals("org.argouml.uml.diagram.static_structure.ui.FigClass")) {
+//						e = s.extract(m.getEntryPoint(), argments.get(i));
+//						break;
+//					}
+//				}
+//			}
+//		} while (m != null);
 
 		// --------------- ArgoUML (クラス図形配置機能, 以下の13回目?のデルタ) ---------------		
 //		DeltaExtractorJSON s = new DeltaExtractorJSON("traces\\ArgoUMLBenchmarkWithMoreStandardClasses.trace");
@@ -536,5 +536,8 @@ public class Test {
 //				}
 //			}
 //		} while (m != null);
+		
+		SharedStructureExtractor sse = new SharedStructureExtractor();
+		sse.extract();
 	}
 }
