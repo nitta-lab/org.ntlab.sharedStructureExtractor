@@ -537,7 +537,54 @@ public class Test {
 //			}
 //		} while (m != null);
 		
+		
+		
+		/*SharedStructureExtractor*/
 		SharedStructureExtractor sse = new SharedStructureExtractor();
-		sse.extract();
+		//input
+		//D1 OK 
+//		//long startingTimeDependedFeature = 340186653401300L;//多分違う
+//		long startingTimeDependedFeature = 340188826720900L;
+//		long endTimeDependedFeature = 340188848197200L;	
+//		long startingTimeDependingFeature = 340190571779800L;
+//		String sharedObject = "org.argouml.uml.diagram.static_structure.ui.FigClass";
+//	    String startingPointDependingFeature = "public void org.argouml.uml.diagram.ui.ActionRemoveFromDiagram.actionPerformed(";	
+//		String tracePath = "traces\\ArgoUMLBenchmarkWithMoreStandardClasses.trace";	
+		
+		//D2
+//		long startingTimeDependedFeature = 340186489032100L;
+//		long endTimeDependedFeature = 340186766341500L;	
+//		long startingTimeDependingFeature = 340188826720900L;
+//		//long startingTimeDependingFeature = 340186653401300L; //多分違う
+//	    String startingPointDependingFeature = "public void org.tigris.gef.base.ModeSelect.mousePressed(";	
+//		String sharedObject = "org.argouml.uml.diagram.static_structure.ui.FigClass";
+//		String tracePath = "traces\\ArgoUMLBenchmarkWithMoreStandardClasses.trace";	
+		
+		//D3
+//		long startingTimeDependedFeature = 399757723832900L;
+//		long endTimeDependedFeature = 399758531407600L;
+//		long startingTimeDependingFeature = 399760005373600L;
+//	    String startingPointDependingFeature = "private void org.gjt.sp.jedit.textarea.TextArea.delete(";	
+//		String sharedObject = "org.gjt.sp.jedit.textarea.Selection$Range";
+//		String tracePath = "traces\\jEditBenchmarkWithMoreStandardClasses.trace";	
+		
+		//D4
+//		long startingTimeDependedFeature = 242744417188500L;
+//		long endTimeDependedFeature = 242744449094000L;
+//		long startingTimeDependingFeature =242745352334200L;
+//	    String startingPointDependingFeature = "public void org.jhotdraw.draw.tool.DefaultDragTracker.mouseDragged(";	
+//		String sharedObject = "org.jhotdraw.draw.RectangleFigure";
+//		String tracePath = "traces\\jHotDrawBenchmarkWithMoreStandardClasses.trace";	
+		
+		//D5 target(extract（）メソッドの第7引数)を7にする
+		long startingTimeDependedFeature = 242738929650000L;
+		long endTimeDependedFeature =       242740075715600L;
+		long startingTimeDependingFeature =242744389297100L;
+	    String startingPointDependingFeature = "public void org.jhotdraw.draw.tool.SelectionTool.mousePressed(";	
+		String sharedObject = "org.jhotdraw.draw.RectangleFigure";
+		String tracePath = "traces\\jHotDrawBenchmarkWithMoreStandardClasses.trace";	
+		
+		TraceJSON trace = new TraceJSON(tracePath);
+		sse.extract(trace, startingTimeDependedFeature, endTimeDependedFeature, startingTimeDependingFeature, sharedObject, startingPointDependingFeature, 7);
 	}
 }

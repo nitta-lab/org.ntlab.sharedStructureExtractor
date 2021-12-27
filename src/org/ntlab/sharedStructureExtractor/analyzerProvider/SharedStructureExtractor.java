@@ -1,25 +1,25 @@
 package org.ntlab.sharedStructureExtractor.analyzerProvider;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.SortedSet;
 import java.util.Stack;
 
+import org.ntlab.sharedStructureExtractor.analyzerProvider.Alias.AliasType;
 import org.ntlab.traceAnalysisPlatform.tracer.trace.MethodExecution;
 import org.ntlab.traceAnalysisPlatform.tracer.trace.ObjectReference;
 import org.ntlab.traceAnalysisPlatform.tracer.trace.Reference;
+import org.ntlab.traceAnalysisPlatform.tracer.trace.TraceJSON;
 import org.ntlab.traceAnalysisPlatform.tracer.trace.TracePoint;
 
 public class SharedStructureExtractor {
+	public Set<Reference> extractedSharedStructure = new HashSet<Reference>();
+	public HashMap<String, HashSet<Integer>> extractedLines = new HashMap<String, HashSet<Integer>>();
 	public Stack<Reference> stack = new Stack<Reference>();
 	public Map<Reference, TracePoint> refToLastTp = new HashMap<Reference, TracePoint>();
-	public Set<Reference> extractedSharedStructure = new HashSet<Reference>();
-	
 	public IAliasTracker aliasTracker = new IAliasTracker() {
 		public ArrayList<Alias> aliasList =  new ArrayList<Alias>();
 
@@ -43,88 +43,73 @@ public class SharedStructureExtractor {
 		
 	public SharedStructureExtractor() {
 	}
-
-	public void extract() {
-		// TODO Auto-generated method stub
+	
+	//最初のデルタはtarget回目の参照に対するデルタ
+	public void extract(TraceJSON trace, long startingTimeDependedFeature, long endTimeDependedFeature, long startingTimeDependingFeature,
+			String sharedObject, String startingPointDependingFeature, int target) {
 		long time = System.nanoTime();
-		//input
-//		String startingPointDependingFeature = "protected void org.tigris.gef.base.SelectionManager.addFig(";	
-		//D1 OK 
-		//long startingTimeDependedFeature = 340186653401300L;//多分違う
-		long startingTimeDependedFeature = 340188826720900L;
-		long endTimeDependedFeature = 340188848197200L;	
-		long startingTimeDependingFeature = 340190571779800L;
-		String sharedObject = "org.argouml.uml.diagram.static_structure.ui.FigClass";
-	    String startingPointDependingFeature = "public void org.argouml.uml.diagram.ui.ActionRemoveFromDiagram.actionPerformed(";	
-		String tracePath = "traces\\ArgoUMLBenchmarkWithMoreStandardClasses.trace";	
-		
-		//D2
-//		long startingTimeDependedFeature = 340186489032100L;
-//		long endTimeDependedFeature = 340186766341500L;	
-//		long startingTimeDependingFeature = 340188826720900L;
-//		//long startingTimeDependingFeature = 340186653401300L; //多分違う
-//	    String startingPointDependingFeature = "public void org.tigris.gef.base.ModeSelect.mousePressed(";	
-//		String sharedObject = "org.argouml.uml.diagram.static_structure.ui.FigClass";
-//		String tracePath = "traces\\ArgoUMLBenchmarkWithMoreStandardClasses.trace";	
-		
-		//D3
-//		long startingTimeDependedFeature = 399757723832900L;
-//		long endTimeDependedFeature = 399758531407600L;
-//		long startingTimeDependingFeature = 399760005373600L;
-//	    String startingPointDependingFeature = "private void org.gjt.sp.jedit.textarea.TextArea.delete(";	
-//		String sharedObject = "org.gjt.sp.jedit.textarea.Selection$Range";
-//		String tracePath = "traces\\jEditBenchmarkWithMoreStandardClasses.trace";	
-		
-		//D4
-//		long startingTimeDependedFeature = 242741022589800L;
-//		long endTimeDependedFeature = 242741173330700L;
-//		long startingTimeDependingFeature =242745352334200L;
-//	    String startingPointDependingFeature = "public void org.jhotdraw.draw.tool.DefaultDragTracker.mouseDragged(";	
-//		String sharedObject = "org.jhotdraw.draw.RectangleFigure";
-//		String tracePath = "traces\\jHotDrawBenchmarkWithMoreStandardClasses.trace";	
-		
-		//D5
-//		long startingTimeDependedFeature = 242738929650000L;
-//		long endTimeDependedFeature =       242740075715600L;
-//		long startingTimeDependingFeature =242744389297100L;
-//	    String startingPointDependingFeature = "public void org.jhotdraw.draw.tool.SelectionTool.mousePressed(";	
-//		String sharedObject = "org.jhotdraw.draw.RectangleFigure";
-//		String tracePath = "traces\\jHotDrawBenchmarkWithMoreStandardClasses.trace";	
-		
-		DeltaExtractorJSON s = new DeltaExtractorJSON(tracePath);
+		ArrayList<TracePoint>bottomTracePoints = new ArrayList<TracePoint>();//デルタの底辺部分
+		DeltaExtractorJSON s = new DeltaExtractorJSON(trace);
 		MethodExecution m = null;
 		ExtractedStructure e = null;
 
-		//first delta extraction
+	
+		//////ここから処理//////
 		System.out.println(System.nanoTime() - time);
-		
 		m = s.getLastMethodExecution(startingPointDependingFeature);
-//		{
-//			TracePoint  tp= m.getEntryPoint();
-//			tp.stepBackOver();
-//			for(int i=0; i<7; i++) {
-//				m = s.getLastMethodExecution(startingPointDependingFeature, tp);
-//				tp.stepBackOver();
-//			}
-//		}
+		{
+			TracePoint  tp = m.getEntryPoint();
+			tp.stepBackOver();
+			for(int i=1; i<target; i++) {
+				m = s.getLastMethodExecution(startingPointDependingFeature, tp);
+				tp.stepBackOver();
+			}
+		}
 
 		if(m != null) {
 			Map<ObjectReference, TracePoint> map = m.getObjectReferences(sharedObject);
 			for(ObjectReference obj : map.keySet() ) {
 				e = s.extract(map.get(obj), obj, aliasTracker);
-				//break;//暫定的に最初のデルタだけを対象とする
+				if(e != null) {
+					bottomTracePoints.add(e.getRelatedTracePoint());
+					System.out.println("----------------------------------");
+					extractSub(s, startingTimeDependedFeature, endTimeDependedFeature, startingTimeDependingFeature, sharedObject, startingPointDependingFeature, e, m, bottomTracePoints);
+					//break;//暫定的に最初のデルタだけを対象とする
+				}
 			}
 		}
+	}		
 		
-		System.out.println("----------------------------------");
+
+	
+	//最初のデルタ抽出はTracePointで行う
+	public void extract(TraceJSON trace, long startingTimeDependedFeature, long endTimeDependedFeature, long startingTimeDependingFeature,
+			String sharedObject, String startingPointDependingFeature, TracePoint tp) {
+		ArrayList<TracePoint>bottomTracePoints = new ArrayList<TracePoint>();//デルタの底辺部分
+		DeltaExtractorJSON s = new DeltaExtractorJSON(trace);
+		MethodExecution m = null;
+		ExtractedStructure e = null;
+		
+		e = s.extract(tp, aliasTracker);
+		if(e != null) {
+			bottomTracePoints.add(e.getRelatedTracePoint());
+			System.out.println("----------------------------------");
+			extractSub(s, startingTimeDependedFeature, endTimeDependedFeature, startingTimeDependingFeature, sharedObject, startingPointDependingFeature, e, m, bottomTracePoints);
+		}
+		
+	}
+
+	//最初のデルタはtarget回目の参照に対するデルタ
+	public void extractSub(DeltaExtractorJSON s, long startingTimeDependedFeature, long endTimeDependedFeature, long startingTimeDependingFeature,
+			String sharedObject, String startingPointDependingFeature, ExtractedStructure e, MethodExecution m, ArrayList<TracePoint>bottomTracePoints ) {
+		// TODO Auto-generated method stub
+		
 		TracePoint lastTp = m.getExitPoint();
-		
 		do{
 			if(e != null){
-				//はじめにcollectionAddのシュリンクを行う
-				Set<Reference> extractedReferences = summarizeExtractedRef(e);
-				
-				//抽出された共有構造に追加，デルタ抽出対象の参照を判定する
+				//collectionAddのシュリンク等を行う
+				Set<Reference> extractedReferences = summarizeExtractedRef(e);				
+				//抽出された参照を共有構造に追加，デルタ抽出対象かの判定
 				for(Reference ref : extractedReferences) {
 					addToExtractedSharedStructure(ref, e, s, lastTp, startingTimeDependedFeature, endTimeDependedFeature, startingTimeDependingFeature);
 				}
@@ -134,44 +119,20 @@ public class SharedStructureExtractor {
 				Reference ref = stack.pop();
 				lastTp = refToLastTp.get(ref);
 				e = s.extract(ref, lastTp, aliasTracker);
+				if(e != null) {
+					bottomTracePoints.add(e.getRelatedTracePoint());
+				}
 				System.out.println("----------------------------------");
 			}else {
 				break;
 			}
 		}while(true);
-		
-		
-		//出力
-		System.out.println("extractedSharedStructure");
-		for(Reference ref : extractedSharedStructure) {
-			System.out.println(ref.getSrcClassName() + "(" + ref.getSrcObjectId() + ") -> " + ref.getDstClassName() + "("  + ref.getDstObjectId() +")" );
-		}
-		
-		System.out.println("----------------------------------");
-		System.out.println("extractedLineNo");
-		HashMap<String, HashSet<Integer>> extractedLines = new HashMap<String, HashSet<Integer>>();
-		for(Alias alias : aliasTracker.getAliasList()) {
-			int lineNo = alias.getLineNo();
-			String className = alias.getMethodExecution().getThisClassName();
-			if(extractedLines.containsKey(className)) {
-				extractedLines.get(className).add(lineNo);
-			}else {
-				HashSet<Integer> set = new HashSet<Integer>();
-				set.add(lineNo);
-				extractedLines.put(className, set);
-			}
-		}
-		
-		for(String className : extractedLines.keySet()) {
-			System.out.println(className);
-			for(int lineNo : extractedLines.get(className)) {
-				System.out.println(lineNo);
-			}
-		}
 
+		printResult(bottomTracePoints);//出力
 	}
 	
 	
+	/*refに対してデルタを抽出するかの判定と，extractedSharedStructureへの追加*/
 	public void addToExtractedSharedStructure(Reference ref, ExtractedStructure e, DeltaExtractorJSON s, TracePoint lastTp,
 			long startingTimeDependedFeature, long endTimeDependedFeature, long startingTimeDependingFeature) {
 		long relatedTime = e.getRelatedTracePoint().getStatement().getTimeStamp();
@@ -180,45 +141,54 @@ public class SharedStructureExtractor {
 			extractedSharedStructure.add(ref);
 			return;
 		}
-		
-		TracePoint tp;
-		if(ref.isCreation()) {
-			tp = s.trace.getCreationTracePoint(ref.getDstObject(), lastTp);
-		}else if(ref.isCollection()) {
-			tp = s.trace.getCollectionAddTracePoint(ref, lastTp);
-		}else if(ref.isArray()){
-			tp = s.trace.getArraySetTracePoint(ref, lastTp);
-		}else {
-			tp = s.trace.getFieldUpdateTracePoint(ref, lastTp);
-		}
-		
-		if(tp == null) {
+		if(ref.getSrcObjectId().equals("0")) {
 			extractedSharedStructure.add(ref);
 			return;
 		}
-		long t = tp.getStatement().getTimeStamp();
-		if((startingTimeDependedFeature < t && t < endTimeDependedFeature)
-				||  startingTimeDependingFeature< t ) {
-			if(!ref.getSrcObjectId().equals("0")) {
-				if(!extractedSharedStructure.contains(ref) && !stack.contains(ref)) {
-					stack.add(ref);
-					refToLastTp.put(ref, lastTp);
-				}
+		
+		TracePoint tp;			
+		do {
+			if(ref.isCreation()) {
+				tp = s.trace.getCreationTracePoint(ref.getDstObject(), lastTp);
+			}else if(ref.isCollection()) {
+				tp = s.trace.getCollectionAddTracePoint(ref, lastTp);
+			}else if(ref.isArray()){
+				tp = s.trace.getArraySetTracePoint(ref, lastTp);
+			}else {
+				tp = s.trace.getFieldUpdateTracePoint(ref, lastTp);
+			}	
+			if(tp == null) {
+				break;
 			}
-		}
+			long t = tp.getStatement().getTimeStamp();
+			if(t < startingTimeDependedFeature) {
+				break;
+			}else if((startingTimeDependedFeature <= t && t < endTimeDependedFeature)
+					||  startingTimeDependingFeature< t ) {
+					if(!extractedSharedStructure.contains(ref) && !stack.contains(ref)) {
+						stack.add(ref);
+						refToLastTp.put(ref, lastTp);
+					}
+					break;
+			}
+			if(lastTp.equals(tp)) {
+				break;
+			}
+			lastTp = tp;
+		}while(tp != null);
+		
 		extractedSharedStructure.add(ref);
 	}
 	
+	/*srcサイドのArrayListとdstサイドのArryaListをHashSetにまとめて返す*/
 	public Set<Reference> summarizeExtractedRef(ExtractedStructure e){
 		Set<Reference> refSet =  new HashSet<Reference>();
-		
-		//collectionAddの集約
 		refSet.addAll(shrink(e.getDelta().getSrcSide()));
 		refSet.addAll(shrink(e.getDelta().getDstSide()));
-		
 		return refSet;
 	}
 	
+	/*Java標準コレクション型の場合，イテレータ等が介する部分を省略する*/
 	public Set<Reference> shrink(ArrayList<Reference> refs){
 		Set<Reference> shrinkedRefs = new HashSet<Reference>();
 		
@@ -261,35 +231,53 @@ public class SharedStructureExtractor {
 				}
 			}
 		}
-			
-		//////////////////////////////////////////////////////////////
-		//とりあえず決め打ち
-//		Reference newRef = new Reference(null, null, null, null);
-//		newRef.setCollection(true);
-//		Set<Reference> removedRefs =  new HashSet<Reference>();
-//		
-//		for(Reference ref : refs) {
-//			if(ref.isCollection()) {
-//				if(ref.getSrcClassName().equals("java.util.Vector$Itr")) {
-//					newRef.setDstClassName(ref.getDstClassName());
-//					newRef.setDstObjectId(ref.getDstObjectId());
-//					removedRefs.add(ref);
-//				}else if(ref.getDstClassName().equals("java.util.Vector$Itr")) {
-//					newRef.setSrcClassName(ref.getSrcClassName());
-//					newRef.setSrcObjectId(ref.getSrcObjectId());
-//					removedRefs.add(ref);
-//				}
-//			}else {
-//				newRefs.add(ref);
-//			}
-//		}
-//		
-//		if(!removedRefs.isEmpty()) {
-//			newRefs.add(newRef);
-//		}
-		//////////////////////////////////////////////////////
-		
 		return shrinkedRefs;
 	}
+	
+	public void printResult(ArrayList<TracePoint>bottomTracePoints) {
+		System.out.println("extractedSharedStructure");
+		for(Reference ref : extractedSharedStructure) {
+			System.out.println(ref.getSrcClassName() + "(" + ref.getSrcObjectId() + ") -> " + ref.getDstClassName() + "("  + ref.getDstObjectId() +")" );
+		}
+		
+		System.out.println("----------------------------------");
+		System.out.println("extractedLineNo");
 
+		for(Alias alias : aliasTracker.getAliasList()) {
+			if(alias.getAliasType().equals(AliasType.FORMAL_PARAMETER)) {
+				continue;
+			}
+			int lineNo = alias.getLineNo();
+			String methodSignature = alias.getMethodExecution().getSignature();
+			
+			if(extractedLines.containsKey(methodSignature)) {
+				extractedLines.get(methodSignature).add(lineNo);
+			}else {
+				HashSet<Integer> set = new HashSet<Integer>();
+				set.add(lineNo);
+				extractedLines.put(methodSignature, set);
+			}
+		}
+		
+		for(TracePoint tp : bottomTracePoints) {
+			int lineNo = tp.getStatement().getLineNo();
+			String methodSignature = tp.getMethodExecution().getSignature();
+			if(extractedLines.containsKey(methodSignature)) {
+				extractedLines.get(methodSignature).add(lineNo);
+			}else {
+				HashSet<Integer> set = new HashSet<Integer>();
+				set.add(lineNo);
+				extractedLines.put(methodSignature, set);
+			}
+		}
+
+		for(String className : extractedLines.keySet()) {
+			System.out.println();
+			System.out.println(className);
+			for(int lineNo : extractedLines.get(className)) {
+				System.out.println(lineNo);
+			}
+		}
+	}
+	
 }
